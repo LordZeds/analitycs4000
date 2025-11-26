@@ -26,6 +26,30 @@ interface IngestBody {
     events: IngestEvent[] | IngestEvent
 }
 
+const normalizeUrl = (url: string) => {
+    try {
+        // Remove protocol
+        let clean = url.replace(/^https?:\/\//, '')
+        // Remove www.
+        clean = clean.replace(/^www\./, '')
+        // Remove trailing slash
+        if (clean.endsWith('/')) clean = clean.slice(0, -1)
+        // Get host only for site matching (ignore path)
+        return clean.split('/')[0].toLowerCase()
+    } catch {
+        return ''
+    }
+}
+
+const normalizePath = (url: string) => {
+    try {
+        const urlObj = new URL(url.startsWith('http') ? url : `https://${url}`)
+        return urlObj.pathname
+    } catch {
+        return url
+    }
+}
+
 export async function OPTIONS(req: NextRequest) {
     return NextResponse.json({}, { headers: corsHeaders })
 }
@@ -71,22 +95,12 @@ export async function POST(req: NextRequest) {
             targetTable = body.table
             eventsToInsert = body.events
         } else if (body.table && !Array.isArray(body.events) && typeof body.events === 'object') {
-            // Handle case where events might be a single object inside events property (unlikely but possible based on previous code logic)
-            // Actually previous code checked: if (body.table && !Array.isArray(body)) -> this implied body ITSELF was the event if not array?
-            // Let's look at previous code:
-            // } else if (body.table && !Array.isArray(body)) {
-            //    targetTable = body.table
-            //    eventsToInsert = [body]
-            // }
-            // This suggests the body could be { table: '...', ...eventData }
             targetTable = body.table
-            eventsToInsert = [body as unknown as IngestEvent]
+            eventsToInsert = [body.events]
         } else if (body.table && body.events && !Array.isArray(body.events)) {
-            // Case where body.events is a single object
             targetTable = body.table
             eventsToInsert = [body.events]
         } else {
-            // Fallback for direct object if table is present
             if ((body as any).table) {
                 targetTable = (body as any).table
                 eventsToInsert = [body as unknown as IngestEvent]
@@ -102,57 +116,100 @@ export async function POST(req: NextRequest) {
 
         const supabaseAdmin = getSupabaseAdmin()
 
-        // 3. PREPARAÇÃO: Classificação de Páginas
-        const siteIds = new Set<string>()
-        eventsToInsert.forEach(evt => { if (evt.site_id) siteIds.add(evt.site_id) })
+        // 3. PREPARAÇÃO: Buscar sites existentes para matching
+        const { data: existingSites } = await supabaseAdmin
+            .from('sites')
+            .select('id, url, name')
+            .eq('user_id', ownerId)
 
-        let pageRules: any[] = []
-        if (siteIds.size > 0) {
-            const { data: rules } = await supabaseAdmin
-                .from('site_pages')
-                .select('site_id, path, page_type')
-                .in('site_id', Array.from(siteIds))
-            if (rules) pageRules = rules
+        const siteMap = new Map<string, string>() // normalizedUrl -> siteId
+        if (existingSites) {
+            existingSites.forEach(site => {
+                if (site.url) {
+                    siteMap.set(normalizeUrl(site.url), site.id)
+                }
+            })
         }
 
-        // 4. AUTO-CADASTRO DE SITES
+        // 4. PROCESSAMENTO DE SITES E EVENTOS
         const sitesToUpsert = new Map()
+        const processedEvents: any[] = []
+        const siteIdsForRules = new Set<string>()
 
-        eventsToInsert.forEach(evt => {
-            if (evt.site_id && !sitesToUpsert.has(evt.site_id)) {
-                const siteName = evt.sites?.name || 'Novo Site (Auto)'
-                let siteUrl = `https://auto-${evt.site_id}.com`
+        for (const evt of eventsToInsert) {
+            let eventUrl = evt.url_full || evt.url || ''
+            let normalizedEventHost = normalizeUrl(eventUrl)
 
-                if (evt.url_full) { try { siteUrl = new URL(evt.url_full).origin } catch { } }
-                else if (evt.url) { try { siteUrl = new URL(evt.url).origin } catch { } }
+            let finalSiteId = evt.site_id
 
-                sitesToUpsert.set(evt.site_id, {
-                    id: evt.site_id,
-                    name: siteName,
-                    url: siteUrl,
-                    user_id: ownerId
+            // Tenta encontrar site existente pelo URL se não tiver ID ou se o ID não bater
+            if (normalizedEventHost && siteMap.has(normalizedEventHost)) {
+                finalSiteId = siteMap.get(normalizedEventHost)
+            }
+
+            // Se ainda não temos siteId (novo site), vamos gerar um ID ou usar o que veio
+            if (!finalSiteId) {
+                finalSiteId = evt.site_id
+            }
+
+            const existingSiteById = existingSites?.find(s => s.id === finalSiteId)
+
+            if (!existingSiteById && finalSiteId) {
+                // Novo site (ou site que veio com ID mas URL diferente/não cadastrada)
+                if (!sitesToUpsert.has(finalSiteId)) {
+                    const siteName = evt.sites?.name || normalizedEventHost || 'Novo Site'
+                    let siteUrl = eventUrl
+                    try { siteUrl = new URL(eventUrl).origin } catch { }
+
+                    sitesToUpsert.set(finalSiteId, {
+                        id: finalSiteId,
+                        name: siteName,
+                        url: siteUrl,
+                        user_id: ownerId
+                    })
+                }
+            }
+
+            if (finalSiteId) {
+                siteIdsForRules.add(finalSiteId)
+
+                // Atualiza o evento com o ID correto (pode ter mudado pelo match de URL)
+                processedEvents.push({
+                    ...evt,
+                    site_id: finalSiteId,
+                    normalized_host: normalizedEventHost // auxiliar
                 })
             }
-        })
+        }
 
+        // Upsert dos novos sites
         if (sitesToUpsert.size > 0) {
             const sitesArray = Array.from(sitesToUpsert.values())
             const { error: siteError } = await supabaseAdmin.from('sites').upsert(sitesArray as any, { onConflict: 'id' })
-            if (siteError) {
-                console.error('Error upserting sites:', siteError)
-                // Continue execution, don't fail everything just for site upsert? 
-                // Or maybe we should log it.
-            }
+            if (siteError) console.error('Error upserting sites:', siteError)
         }
 
-        // 5. HIGIENIZAÇÃO E ATRIBUIÇÃO DE PROPRIEDADE
-        const cleanEvents = eventsToInsert.map(evt => {
-            // Remove properties that shouldn't be in the DB or are duplicates
-            const { table, sites, ...rest } = evt
+        // 5. REGRAS DE PÁGINA
+        let pageRules: any[] = []
+        if (siteIdsForRules.size > 0) {
+            const { data: rules } = await supabaseAdmin
+                .from('site_pages')
+                .select('site_id, path, page_type')
+                .in('site_id', Array.from(siteIdsForRules))
+            if (rules) pageRules = rules
+        }
+
+        // 6. HIGIENIZAÇÃO FINAL E INSERÇÃO
+        const cleanEvents = processedEvents.map(evt => {
+            const { table, sites, normalized_host, ...rest } = evt
 
             let contentType = rest.content_type || 'article';
-            if (targetTable === 'pageviews' && rest.url_path) {
-                const rule = pageRules.find(r => r.site_id === rest.site_id && r.path === rest.url_path)
+
+            if (targetTable === 'pageviews') {
+                const eventPath = normalizePath(rest.url_full || rest.url || '')
+
+                // Procura regra exata de path
+                const rule = pageRules.find(r => r.site_id === evt.site_id && r.path === eventPath)
                 if (rule) contentType = rule.page_type
             } else if (targetTable === 'initiate_checkouts' || targetTable === 'purchases') {
                 contentType = 'sales_page'
@@ -160,13 +217,12 @@ export async function POST(req: NextRequest) {
 
             return {
                 ...rest,
+                site_id: evt.site_id, // Garante que usa o ID resolvido
                 user_id: ownerId,
                 content_type: contentType
             }
         })
 
-        // 6. Inserção Segura
-        // Using 'as any' for table name because Supabase types might not be perfectly inferred for dynamic table names
         const { error } = await supabaseAdmin
             .from(targetTable as any)
             .upsert(cleanEvents as any, { onConflict: 'id' })
