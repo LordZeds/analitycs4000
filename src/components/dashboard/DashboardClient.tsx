@@ -1,14 +1,16 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { supabase } from '@/lib/supabase'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/utils/supabase/client'
 import { Site, Pageview, InitiateCheckout, Purchase } from '@/types/supabase'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts'
-import { Users, ShoppingCart, CreditCard, DollarSign, TrendingUp, ArrowDown } from 'lucide-react'
+import { Users, ShoppingCart, CreditCard, DollarSign, TrendingUp, ArrowDown, LogOut } from 'lucide-react'
 
 // Helper to format currency
 const formatCurrency = (value: number) =>
@@ -19,6 +21,8 @@ const formatPercent = (value: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'percent', minimumFractionDigits: 1 }).format(value / 100)
 
 export default function DashboardClient() {
+    const router = useRouter()
+    const supabase = createClient()
     const [sites, setSites] = useState<Site[]>([])
     const [selectedSiteId, setSelectedSiteId] = useState<string>('')
     const [period, setPeriod] = useState<string>('7d')
@@ -28,6 +32,11 @@ export default function DashboardClient() {
     const [pageviews, setPageviews] = useState<Pageview[]>([])
     const [checkouts, setCheckouts] = useState<InitiateCheckout[]>([])
     const [purchases, setPurchases] = useState<Purchase[]>([])
+
+    const handleSignOut = async () => {
+        await supabase.auth.signOut()
+        router.push('/login')
+    }
 
     // Fetch Sites
     useEffect(() => {
@@ -180,6 +189,9 @@ export default function DashboardClient() {
                     <p className="text-gray-500">Visão geral do desempenho do seu negócio.</p>
                 </div>
                 <div className="flex gap-2">
+                    <Button variant="outline" size="icon" onClick={handleSignOut} title="Sair">
+                        <LogOut className="h-4 w-4" />
+                    </Button>
                     <Select value={selectedSiteId} onValueChange={setSelectedSiteId}>
                         <SelectTrigger className="w-[200px]">
                             <SelectValue placeholder="Selecione o Site" />
