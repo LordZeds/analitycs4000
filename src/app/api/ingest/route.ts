@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase'
 
 export const runtime = 'edge'
@@ -87,8 +88,12 @@ export async function POST(req: NextRequest) {
 
         // 3. Ingestão via RPC (Lógica no Banco)
         for (const evt of eventsToProcess) {
+            // REMOVE user_id e site_id que vêm do JSON (conforme solicitado)
+            // Para garantir que usamos apenas o Owner ID do sistema e o Site ID calculado
+            const { user_id, site_id, table, ...rest } = evt
+
             const eventData = {
-                ...evt,
+                ...rest,
                 table: targetTable
             }
 
@@ -121,13 +126,39 @@ export async function GET(req: NextRequest) {
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 
+    let dbConnection = 'PENDING'
+    let dbError = null
+
+    if (supabaseUrl && serviceKey) {
+        try {
+            const adminClient = createClient(supabaseUrl, serviceKey, {
+                auth: { persistSession: false, autoRefreshToken: false }
+            })
+            // Tenta uma query simples para validar a chave
+            const { data, error } = await adminClient.from('sites').select('id').limit(1)
+            if (error) {
+                dbConnection = 'FAILED'
+                dbError = error.message
+            } else {
+                dbConnection = 'SUCCESS'
+            }
+        } catch (e: any) {
+            dbConnection = 'ERROR'
+            dbError = e.message
+        }
+    }
+
     return NextResponse.json({
         status: 'diagnostic',
         env: {
             NEXT_PUBLIC_SUPABASE_URL: supabaseUrl ? 'OK' : 'MISSING',
             INGEST_SECRET_KEY: secretKey ? 'OK' : 'MISSING',
             OWNER_USER_ID: ownerId ? 'OK' : 'MISSING',
-            SUPABASE_SERVICE_ROLE_KEY: serviceKey ? 'OK' : 'MISSING' // <--- O problema costuma estar aqui
+            SUPABASE_SERVICE_ROLE_KEY: serviceKey ? 'OK' : 'MISSING'
+        },
+        connection_test: {
+            status: dbConnection,
+            error: dbError
         },
         timestamp: new Date().toISOString()
     }, { headers: corsHeaders })
