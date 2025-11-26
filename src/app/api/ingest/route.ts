@@ -48,38 +48,32 @@ export async function POST(req: NextRequest) {
 
         const supabaseAdmin = getSupabaseAdmin()
 
-        // 4. AUTO-CADASTRO DE SITES & CLASSIFICAÇÃO DE PÁGINAS
-        const sitesToUpsert = new Map()
+        // 4. PREPARAÇÃO & CLASSIFICAÇÃO
+        // Coleta IDs de site para buscar regras de página
         const siteIds = new Set<string>()
+        eventsToInsert.forEach(evt => { if (evt.site_id) siteIds.add(evt.site_id) })
 
-        // Coleta IDs únicos para buscar regras
-        eventsToInsert.forEach(evt => {
-            if (evt.site_id) siteIds.add(evt.site_id)
-        })
-
-        // Busca regras de páginas cadastradas para esses sites
         let pageRules: any[] = []
         if (siteIds.size > 0) {
             const { data: rules } = await supabaseAdmin
                 .from('site_pages')
                 .select('site_id, path, page_type')
                 .in('site_id', Array.from(siteIds))
-
             if (rules) pageRules = rules
         }
 
-        // Prepara sites para auto-cadastro
+        // 5. AUTO-CADASTRO DE SITES (Correção do Erro 23503)
+        const sitesToUpsert = new Map()
+
         eventsToInsert.forEach(evt => {
             if (evt.site_id && !sitesToUpsert.has(evt.site_id)) {
                 const siteName = evt.sites?.name || 'Novo Site (Auto)'
                 let siteUrl = `https://auto-${evt.site_id}.com`
 
-                if (evt.url_full) {
-                    try { siteUrl = new URL(evt.url_full).origin } catch { }
-                } else if (evt.url) {
-                    try { siteUrl = new URL(evt.url).origin } catch { }
-                }
+                if (evt.url_full) { try { siteUrl = new URL(evt.url_full).origin } catch { } }
+                else if (evt.url) { try { siteUrl = new URL(evt.url).origin } catch { } }
 
+                // Tenta usar o user_id que veio (do Tracker), mas se falhar, a API cuidará
                 sitesToUpsert.set(evt.site_id, {
                     id: evt.site_id,
                     name: siteName,
@@ -89,51 +83,44 @@ export async function POST(req: NextRequest) {
             }
         })
 
-        // Executa Auto-cadastro de sites (se não existirem)
         if (sitesToUpsert.size > 0) {
             const sitesArray = Array.from(sitesToUpsert.values())
+
+            // Loop um por um para garantir que sites novos não travem o lote
             for (const site of sitesArray) {
+                // Tenta criar normal
                 const { error: siteError } = await supabaseAdmin
                     .from('sites')
                     .upsert(site, { onConflict: 'id' })
 
                 if (siteError) {
-                    console.warn(`Falha ao criar site. Tentando órfão...`)
+                    console.warn(`Site ${site.id} falhou com user_id. Tentando modo órfão...`)
+                    // Se falhar (ex: user_id não existe no banco novo), cria sem dono
                     const { user_id, ...siteOrphan } = site
                     await supabaseAdmin.from('sites').upsert(siteOrphan, { onConflict: 'id' })
                 }
             }
         }
 
-        // 5. Limpeza e CLASSIFICAÇÃO (AQUI ESTÁ A LÓGICA QUE VOCÊ QUER)
+        // 6. LIMPEZA E INSERÇÃO
         const cleanEvents = eventsToInsert.map(evt => {
-            // Remove campos que não são colunas
             const { table, sites, ...rest } = evt
 
-            // Lógica de Classificação Baseada no Cadastro Manual
-            let contentType = rest.content_type || 'article'; // Default é artigo se não achar nada
-
+            // Classificação Inteligente
+            let contentType = rest.content_type || 'article';
             if (targetTable === 'pageviews' && rest.url_path) {
-                // Procura se esse path está cadastrado nas regras
-                const rule = pageRules.find(r =>
-                    r.site_id === rest.site_id &&
-                    r.path === rest.url_path // Ex: /oferta
-                )
-
-                if (rule) {
-                    contentType = rule.page_type // Ex: sales_page
-                }
+                const rule = pageRules.find(r => r.site_id === rest.site_id && r.path === rest.url_path)
+                if (rule) contentType = rule.page_type
             } else if (targetTable === 'initiate_checkouts' || targetTable === 'purchases') {
-                contentType = 'sales_page' // Vendas e Checkouts são sempre de vendas
+                contentType = 'sales_page'
             }
 
             return {
                 ...rest,
-                content_type: contentType // Grava a classificação correta
+                content_type: contentType
             }
         })
 
-        // 6. Inserção dos Dados
         const { error } = await (supabaseAdmin
             .from(targetTable as any) as any)
             .upsert(cleanEvents, { onConflict: 'id' })
@@ -149,7 +136,7 @@ export async function POST(req: NextRequest) {
         }, { status: 200 })
 
     } catch (err: any) {
-        console.error('Ingest API error:', err)
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+        console.error('API error:', err)
+        return NextResponse.json({ error: 'Internal Error' }, { status: 500 })
     }
 }
