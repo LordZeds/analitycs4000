@@ -51,19 +51,15 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Invalid JSON' }, { status: 400, headers: corsHeaders })
         }
 
-        let targetTable = ''
-        let eventsToInsert: any[] = []
+        // Normaliza para Array de Eventos
+        let eventsToProcess: any[] = []
+        let targetTable = body.table || ''
 
-        // Normaliza formatos (Batch ou Single)
-        if (body.table && Array.isArray(body.events)) {
-            targetTable = body.table
-            eventsToInsert = body.events
-        } else if (body.table && body.events) {
-            targetTable = body.table
-            eventsToInsert = Array.isArray(body.events) ? body.events : [body.events]
+        if (body.events) {
+            eventsToProcess = Array.isArray(body.events) ? body.events : [body.events]
         } else if (body.table) {
-            targetTable = body.table
-            eventsToInsert = [body]
+            // Formato legado onde o body é o evento
+            eventsToProcess = [body]
         } else {
             return NextResponse.json({ error: 'Invalid payload format' }, { status: 400, headers: corsHeaders })
         }
@@ -74,92 +70,30 @@ export async function POST(req: NextRequest) {
         }
 
         const supabaseAdmin = getSupabaseAdmin()
+        const results = []
 
-        // 3. BUSCA DE SITES (Lookup Seguro)
-        // Busca apenas os sites que pertencem a VOCÊ (ownerId)
-        const { data: mySites } = await supabaseAdmin
-            .from('sites')
-            .select('id, url')
-            .eq('user_id', ownerId)
-
-        if (!mySites || mySites.length === 0) {
-            return NextResponse.json({ error: 'No sites configured in Dashboard' }, { status: 400, headers: corsHeaders })
-        }
-
-        // Mapa de Domínio -> ID
-        const domainMap = new Map()
-        mySites.forEach((s: any) => {
-            const domain = normalizeUrl(s.url)
-            if (domain) domainMap.set(domain, s.id)
-        })
-
-        // Busca regras de página para classificação
-        const { data: pageRules } = await supabaseAdmin
-            .from('site_pages')
-            .select('site_id, path, page_type')
-            .in('site_id', mySites.map((s: any) => s.id))
-
-        // 4. HIGIENIZAÇÃO E ATRIBUIÇÃO
-        const cleanEvents: any[] = []
-
-        for (const evt of eventsToInsert) {
-            const { table, sites, ...rest } = evt
-
-            // Identifica o site pela URL do evento
-            const eventUrl = rest.url_full || rest.url || ''
-            const eventDomain = normalizeUrl(eventUrl)
-
-            let matchedSiteId = null
-
-            // Lógica de Match (Exato ou Subdomínio)
-            if (eventDomain) {
-                if (domainMap.has(eventDomain)) {
-                    matchedSiteId = domainMap.get(eventDomain)
-                } else {
-                    for (const [dbDomain, dbId] of Array.from(domainMap.entries())) {
-                        if (typeof dbDomain === 'string' && eventDomain.endsWith('.' + dbDomain)) {
-                            matchedSiteId = dbId
-                            break
-                        }
-                    }
-                }
+        // 3. Ingestão via RPC (Lógica no Banco)
+        for (const evt of eventsToProcess) {
+            // Prepara o objeto do evento com a tabela correta
+            const eventData = {
+                ...evt,
+                table: targetTable
             }
 
-            // Se não achou site cadastrado, IGNORA (Não cria lixo, não duplica)
-            if (!matchedSiteId) continue
+            const { data, error } = await supabaseAdmin.rpc('ingest_event', {
+                p_owner_id: ownerId,
+                p_event_data: eventData
+            } as any)
 
-            // Classificação de Conteúdo
-            let contentType = rest.content_type || 'article'
-            if (targetTable === 'pageviews' && rest.url_path && pageRules) {
-                const rule = pageRules.find((r: any) => r.site_id === matchedSiteId && r.path === rest.url_path)
-                if (rule) contentType = rule.page_type
-            } else if (targetTable !== 'pageviews') {
-                contentType = 'sales_page'
+            if (error) {
+                console.error('RPC Error:', error)
+                results.push({ error: error.message })
+            } else {
+                results.push(data)
             }
-
-            cleanEvents.push({
-                ...rest,
-                site_id: matchedSiteId, // ID Real do Banco
-                user_id: ownerId,       // Seu Usuário (Segurança)
-                content_type: contentType
-            })
         }
 
-        if (cleanEvents.length === 0) {
-            return NextResponse.json({ message: 'Events ignored (No matching site)' }, { status: 200, headers: corsHeaders })
-        }
-
-        // 5. SALVAR (com cast 'as any' para TypeScript não reclamar)
-        const { error } = await (supabaseAdmin
-            .from(targetTable as any) as any)
-            .upsert(cleanEvents as any, { onConflict: 'id' })
-
-        if (error) {
-            console.error('Supabase error:', error)
-            return NextResponse.json({ error: error.message }, { status: 500, headers: corsHeaders })
-        }
-
-        return NextResponse.json({ success: true, count: cleanEvents.length }, { status: 200, headers: corsHeaders })
+        return NextResponse.json({ success: true, count: results.length, results }, { status: 200, headers: corsHeaders })
 
     } catch (err: any) {
         console.error('API error:', err)
