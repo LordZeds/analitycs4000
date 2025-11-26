@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase'
 
-export const runtime = 'edge'
+// export const runtime = 'edge' // Comentado para usar Node.js Runtime (mais estável para DB)
 
 const ALLOWED_TABLES = ['pageviews', 'initiate_checkouts', 'purchases']
 
@@ -25,6 +25,67 @@ const normalizeUrl = (url: string) => {
 
 export async function OPTIONS(req: NextRequest) {
     return NextResponse.json({}, { headers: corsHeaders })
+}
+
+// Helper para normalizar chaves (CamelCase -> snake_case) e Aliases
+const normalizePayload = (evt: any) => {
+    const map: Record<string, string> = {
+        // IDs
+        'siteId': 'site_id',
+        'visitorId': 'visitor_id',
+        'sessionId': 'session_id',
+        'userId': 'user_id',
+
+        // Screen / Device
+        'screenWidth': 'screen_width',
+        'screenHeight': 'screen_height',
+        'viewportWidth': 'viewport_width',
+        'viewportHeight': 'viewport_height',
+        'deviceType': 'device_type',
+        'client_user_agent': 'user_agent',
+
+        // Content / Product
+        'content_name': 'product_name',
+        'content_category': 'product_category',
+        'title': 'page_title',
+        'value': 'price_value',
+        'currency': 'price_currency',
+
+        // URL / Nav
+        'url': 'url_full',
+        'path': 'url_path',
+        'referrer': 'referrer_url',
+    }
+
+    const newEvt: any = { ...evt }
+
+    // 1. Mapear campos conhecidos
+    for (const [key, val] of Object.entries(evt)) {
+        if (map[key]) {
+            newEvt[map[key]] = val
+            // Opcional: remover a chave antiga se quiser limpar, mas manter pode ser seguro para raw_payload
+        }
+    }
+
+    // 2. Tratar content_ids (Array -> Single)
+    if (evt.content_ids && Array.isArray(evt.content_ids) && evt.content_ids.length > 0) {
+        newEvt.product_id = evt.content_ids[0]
+    }
+
+    // 3. Inferir Tabela pelo eventType
+    if (evt.eventType) {
+        const type = evt.eventType.toUpperCase()
+        if (type === 'PURCHASE') newEvt.table = 'purchases'
+        else if (type === 'INITIATE_CHECKOUT') newEvt.table = 'initiate_checkouts'
+        else if (type === 'PAGEVIEW') newEvt.table = 'pageviews'
+    }
+
+    // Fallback para Purchase se tiver transaction_id e não tiver table
+    if (!newEvt.table && newEvt.transaction_id) {
+        newEvt.table = 'purchases'
+    }
+
+    return newEvt
 }
 
 export async function POST(req: NextRequest) {
@@ -59,22 +120,16 @@ export async function POST(req: NextRequest) {
 
         // Normaliza para Array de Eventos
         let eventsToProcess: any[] = []
-        let targetTable = body.table || ''
 
         if (body.events) {
             eventsToProcess = Array.isArray(body.events) ? body.events : [body.events]
-        } else if (body.table) {
-            eventsToProcess = [body]
+        } else if (Array.isArray(body)) {
+            eventsToProcess = body
         } else {
-            return NextResponse.json({ error: 'Invalid payload format', debug: debugLog }, { status: 400, headers: corsHeaders })
+            eventsToProcess = [body]
         }
 
-        targetTable = targetTable.replace('public.', '')
-        if (!ALLOWED_TABLES.includes(targetTable)) {
-            return NextResponse.json({ error: 'Invalid table', debug: debugLog }, { status: 400, headers: corsHeaders })
-        }
-
-        debugLog.push({ step: 'processing', table: targetTable, eventCount: eventsToProcess.length })
+        debugLog.push({ step: 'processing', eventCount: eventsToProcess.length })
 
         let supabaseAdmin
         try {
@@ -87,9 +142,21 @@ export async function POST(req: NextRequest) {
         const results = []
 
         // 3. Ingestão via RPC (Lógica no Banco)
-        for (const evt of eventsToProcess) {
+        for (const rawEvt of eventsToProcess) {
+            // NORMALIZAÇÃO CRÍTICA (CamelCase -> snake_case)
+            const evt = normalizePayload(rawEvt)
+
+            // Define tabela alvo (prioridade: campo table > inferência)
+            let targetTable = evt.table || body.table || ''
+            targetTable = targetTable.replace('public.', '')
+
+            if (!ALLOWED_TABLES.includes(targetTable)) {
+                results.push({ error: 'Table not identified or invalid', event: evt })
+                continue
+            }
+
             // REMOVE user_id e site_id que vêm do JSON (conforme solicitado)
-            // Para garantir que usamos apenas o Owner ID do sistema e o Site ID calculado
+            // Mantemos TODO O RESTO para garantir que UTMs, Browser, etc cheguem no banco
             const { user_id, site_id, table, ...rest } = evt
 
             const eventData = {
@@ -105,7 +172,12 @@ export async function POST(req: NextRequest) {
             if (error) {
                 console.error('RPC Error:', error)
                 results.push({ error: error.message, code: error.code, details: error.details })
-                debugLog.push({ step: 'rpc_error', error })
+                debugLog.push({ step: 'rpc_transport_error', error })
+            } else if (data && data.error) {
+                // ERRO LÓGICO DO SQL
+                console.error('RPC Logic Error:', data.error)
+                results.push({ error: data.error })
+                debugLog.push({ step: 'rpc_logic_error', error: data.error })
             } else {
                 results.push(data)
                 debugLog.push({ step: 'rpc_success', data })

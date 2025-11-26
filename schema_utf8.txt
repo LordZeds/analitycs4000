@@ -1,0 +1,779 @@
+Tables: {
+      cleanup_logs: {
+        Row: {
+          error_message: string | null
+          events_deleted: number | null
+          executed_at: string | null
+          execution_time_ms: number | null
+          id: string
+          status: string | null
+        }
+        Insert: {
+          error_message?: string | null
+          events_deleted?: number | null
+          executed_at?: string | null
+          execution_time_ms?: number | null
+          id?: string
+          status?: string | null
+        }
+        Update: {
+          error_message?: string | null
+          events_deleted?: number | null
+          executed_at?: string | null
+          execution_time_ms?: number | null
+          id?: string
+          status?: string | null
+        }
+        Relationships: []
+      }
+      external_webhook_logs: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          id: string
+          site_id: string
+          source_event_id: string | null
+          source_event_table: string | null
+          status: string
+          user_id: string
+          visitor_id: string | null
+          webhook_payload: Json | null
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          site_id: string
+          source_event_id?: string | null
+          source_event_table?: string | null
+          status?: string
+          user_id: string
+          visitor_id?: string | null
+          webhook_payload?: Json | null
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          site_id?: string
+          source_event_id?: string | null
+          source_event_table?: string | null
+          status?: string
+          user_id?: string
+          visitor_id?: string | null
+          webhook_payload?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "external_webhook_logs_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ga4_events: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          event_name: string
+          id: string
+          processed_payload: Json | null
+          raw_payload: Json | null
+          site_id: string
+          source_event_id: string | null
+          source_event_table: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          event_name: string
+          id?: string
+          processed_payload?: Json | null
+          raw_payload?: Json | null
+          site_id: string
+          source_event_id?: string | null
+          source_event_table?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          event_name?: string
+          id?: string
+          processed_payload?: Json | null
+          raw_payload?: Json | null
+          site_id?: string
+          source_event_id?: string | null
+          source_event_table?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ga4_events_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hotmart_webhook_logs: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          headers: Json | null
+          id: string
+          payload: Json | null
+          site_id: string | null
+          status: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          headers?: Json | null
+          id?: string
+          payload?: Json | null
+          site_id?: string | null
+          status?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          headers?: Json | null
+          id?: string
+          payload?: Json | null
+          site_id?: string | null
+          status?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hotmart_webhook_logs_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      initiate_checkouts: {
+        Row: {
+          browser_name: string | null
+          browser_version: string | null
+          city: string | null
+          client_ip_address: string | null
+          country_code: string | null
+          device_type: string | null
+          epik: string | null
+          fbc: string | null
+          fbclid: string | null
+          fbp: string | null
+          ga_client_id: string | null
+          ga_session_id: string | null
+          gclid: string | null
+          id: string
+          language: string | null
+          meta_event_id: string | null
+          msclkid: string | null
+          os_name: string | null
+          os_version: string | null
+          page_load_time: number | null
+          page_title: string | null
+          price_currency: string | null
+          price_value: number | null
+          product_category: string | null
+          product_id: string | null
+          product_name: string | null
+          raw_payload: Json | null
+          referrer_url: string | null
+          region: string | null
+          screen_height: number | null
+          screen_width: number | null
+          session_id: string
+          site_id: string
+          timestamp: string
+          ttclid: string | null
+          url_full: string | null
+          url_path: string | null
+          user_agent: string | null
+          user_id: string
+          utm_campaign: string | null
+          utm_content: string | null
+          utm_id: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          utm_term: string | null
+          viewport_height: number | null
+          viewport_width: number | null
+          visitor_id: string
+        }
+        Insert: {
+          browser_name?: string | null
+          browser_version?: string | null
+          city?: string | null
+          client_ip_address?: string | null
+          country_code?: string | null
+          device_type?: string | null
+          epik?: string | null
+          fbc?: string | null
+          fbclid?: string | null
+          fbp?: string | null
+          ga_client_id?: string | null
+          ga_session_id?: string | null
+          gclid?: string | null
+          id?: string
+          language?: string | null
+          meta_event_id?: string | null
+          msclkid?: string | null
+          os_name?: string | null
+          os_version?: string | null
+          page_load_time?: number | null
+          page_title?: string | null
+          price_currency?: string | null
+          price_value?: number | null
+          product_category?: string | null
+          product_id?: string | null
+          product_name?: string | null
+          raw_payload?: Json | null
+          referrer_url?: string | null
+          region?: string | null
+          screen_height?: number | null
+          screen_width?: number | null
+          session_id: string
+          site_id: string
+          timestamp?: string
+          ttclid?: string | null
+          url_full?: string | null
+          url_path?: string | null
+          user_agent?: string | null
+          user_id: string
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_id?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+          viewport_height?: number | null
+          viewport_width?: number | null
+          visitor_id: string
+        }
+        Update: {
+          browser_name?: string | null
+          browser_version?: string | null
+          city?: string | null
+          client_ip_address?: string | null
+          country_code?: string | null
+          device_type?: string | null
+          epik?: string | null
+          fbc?: string | null
+          fbclid?: string | null
+          fbp?: string | null
+          ga_client_id?: string | null
+          ga_session_id?: string | null
+          gclid?: string | null
+          id?: string
+          language?: string | null
+          meta_event_id?: string | null
+          msclkid?: string | null
+          os_name?: string | null
+          os_version?: string | null
+          page_load_time?: number | null
+          page_title?: string | null
+          price_currency?: string | null
+          price_value?: number | null
+          product_category?: string | null
+          product_id?: string | null
+          product_name?: string | null
+          raw_payload?: Json | null
+          referrer_url?: string | null
+          region?: string | null
+          screen_height?: number | null
+          screen_width?: number | null
+          session_id?: string
+          site_id?: string
+          timestamp?: string
+          ttclid?: string | null
+          url_full?: string | null
+          url_path?: string | null
+          user_agent?: string | null
+          user_id?: string
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_id?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+          viewport_height?: number | null
+          viewport_width?: number | null
+          visitor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "initiate_checkouts_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meta_capi_events: {
+        Row: {
+          action_source: string
+          created_at: string
+          error_message: string | null
+          event_name: string
+          id: string
+          processed_payload: Json | null
+          raw_payload: Json | null
+          site_id: string
+          source_event_id: string | null
+          source_event_table: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          action_source: string
+          created_at?: string
+          error_message?: string | null
+          event_name: string
+          id?: string
+          processed_payload?: Json | null
+          raw_payload?: Json | null
+          site_id: string
+          source_event_id?: string | null
+          source_event_table?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          action_source?: string
+          created_at?: string
+          error_message?: string | null
+          event_name?: string
+          id?: string
+          processed_payload?: Json | null
+          raw_payload?: Json | null
+          site_id?: string
+          source_event_id?: string | null
+          source_event_table?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_capi_events_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pageviews: {
+        Row: {
+          browser_name: string | null
+          browser_version: string | null
+          city: string | null
+          client_ip_address: string | null
+          content_type: string | null
+          country_code: string | null
+          device_type: string | null
+          epik: string | null
+          fbc: string | null
+          fbclid: string | null
+          fbp: string | null
+          ga_client_id: string | null
+          ga_session_id: string | null
+          gclid: string | null
+          id: string
+          language: string | null
+          meta_event_id: string | null
+          msclkid: string | null
+          os_name: string | null
+          os_version: string | null
+          page_load_time: number | null
+          page_title: string | null
+          referrer_url: string | null
+          region: string | null
+          screen_height: number | null
+          screen_width: number | null
+          session_id: string
+          site_id: string
+          timestamp: string
+          ttclid: string | null
+          url_full: string | null
+          url_path: string | null
+          user_agent: string | null
+          user_id: string
+          utm_campaign: string | null
+          utm_content: string | null
+          utm_id: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          utm_term: string | null
+          viewport_height: number | null
+          viewport_width: number | null
+          visitor_id: string
+        }
+        Insert: {
+          browser_name?: string | null
+          browser_version?: string | null
+          city?: string | null
+          client_ip_address?: string | null
+          content_type?: string | null
+          country_code?: string | null
+          device_type?: string | null
+          epik?: string | null
+          fbc?: string | null
+          fbclid?: string | null
+          fbp?: string | null
+          ga_client_id?: string | null
+          ga_session_id?: string | null
+          gclid?: string | null
+          id?: string
+          language?: string | null
+          meta_event_id?: string | null
+          msclkid?: string | null
+          os_name?: string | null
+          os_version?: string | null
+          page_load_time?: number | null
+          page_title?: string | null
+          referrer_url?: string | null
+          region?: string | null
+          screen_height?: number | null
+          screen_width?: number | null
+          session_id: string
+          site_id: string
+          timestamp?: string
+          ttclid?: string | null
+          url_full?: string | null
+          url_path?: string | null
+          user_agent?: string | null
+          user_id: string
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_id?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+          viewport_height?: number | null
+          viewport_width?: number | null
+          visitor_id: string
+        }
+        Update: {
+          browser_name?: string | null
+          browser_version?: string | null
+          city?: string | null
+          client_ip_address?: string | null
+          content_type?: string | null
+          country_code?: string | null
+          device_type?: string | null
+          epik?: string | null
+          fbc?: string | null
+          fbclid?: string | null
+          fbp?: string | null
+          ga_client_id?: string | null
+          ga_session_id?: string | null
+          gclid?: string | null
+          id?: string
+          language?: string | null
+          meta_event_id?: string | null
+          msclkid?: string | null
+          os_name?: string | null
+          os_version?: string | null
+          page_load_time?: number | null
+          page_title?: string | null
+          referrer_url?: string | null
+          region?: string | null
+          screen_height?: number | null
+          screen_width?: number | null
+          session_id?: string
+          site_id?: string
+          timestamp?: string
+          ttclid?: string | null
+          url_full?: string | null
+          url_path?: string | null
+          user_agent?: string | null
+          user_id?: string
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_id?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+          viewport_height?: number | null
+          viewport_width?: number | null
+          visitor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pageviews_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      purchases: {
+        Row: {
+          attribution_status: string | null
+          browser_name: string | null
+          browser_version: string | null
+          buyer_address: string | null
+          buyer_email: string | null
+          buyer_name: string | null
+          buyer_phone: string | null
+          buyer_phone_code: string | null
+          city: string | null
+          client_ip_address: string | null
+          country_code: string | null
+          device_type: string | null
+          epik: string | null
+          fbc: string | null
+          fbclid: string | null
+          fbp: string | null
+          ga_client_id: string | null
+          ga_session_id: string | null
+          gclid: string | null
+          id: string
+          language: string | null
+          meta_event_id: string | null
+          msclkid: string | null
+          os_name: string | null
+          os_version: string | null
+          page_title: string | null
+          price_currency: string | null
+          price_value: number | null
+          product_id: number | null
+          product_name: string | null
+          raw_payload: Json | null
+          referrer_url: string | null
+          region: string | null
+          screen_height: number | null
+          screen_width: number | null
+          session_id: string | null
+          site_id: string
+          status: string | null
+          timestamp: string
+          transaction_id: string | null
+          ttclid: string | null
+          url_full: string | null
+          url_path: string | null
+          user_agent: string | null
+          user_id: string
+          utm_campaign: string | null
+          utm_content: string | null
+          utm_id: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          utm_term: string | null
+          viewport_height: number | null
+          viewport_width: number | null
+          visitor_id: string | null
+        }
+        Insert: {
+          attribution_status?: string | null
+          browser_name?: string | null
+          browser_version?: string | null
+          buyer_address?: string | null
+          buyer_email?: string | null
+          buyer_name?: string | null
+          buyer_phone?: string | null
+          buyer_phone_code?: string | null
+          city?: string | null
+          client_ip_address?: string | null
+          country_code?: string | null
+          device_type?: string | null
+          epik?: string | null
+          fbc?: string | null
+          fbclid?: string | null
+          fbp?: string | null
+          ga_client_id?: string | null
+          ga_session_id?: string | null
+          gclid?: string | null
+          id?: string
+          language?: string | null
+          meta_event_id?: string | null
+          msclkid?: string | null
+          os_name?: string | null
+          os_version?: string | null
+          page_title?: string | null
+          price_currency?: string | null
+          price_value?: number | null
+          product_id?: number | null
+          product_name?: string | null
+          raw_payload?: Json | null
+          referrer_url?: string | null
+          region?: string | null
+          screen_height?: number | null
+          screen_width?: number | null
+          session_id?: string | null
+          site_id: string
+          status?: string | null
+          timestamp?: string
+          transaction_id?: string | null
+          ttclid?: string | null
+          url_full?: string | null
+          url_path?: string | null
+          user_agent?: string | null
+          user_id: string
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_id?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+          viewport_height?: number | null
+          viewport_width?: number | null
+          visitor_id?: string | null
+        }
+        Update: {
+          attribution_status?: string | null
+          browser_name?: string | null
+          browser_version?: string | null
+          buyer_address?: string | null
+          buyer_email?: string | null
+          buyer_name?: string | null
+          buyer_phone?: string | null
+          buyer_phone_code?: string | null
+          city?: string | null
+          client_ip_address?: string | null
+          country_code?: string | null
+          device_type?: string | null
+          epik?: string | null
+          fbc?: string | null
+          fbclid?: string | null
+          fbp?: string | null
+          ga_client_id?: string | null
+          ga_session_id?: string | null
+          gclid?: string | null
+          id?: string
+          language?: string | null
+          meta_event_id?: string | null
+          msclkid?: string | null
+          os_name?: string | null
+          os_version?: string | null
+          page_title?: string | null
+          price_currency?: string | null
+          price_value?: number | null
+          product_id?: number | null
+          product_name?: string | null
+          raw_payload?: Json | null
+          referrer_url?: string | null
+          region?: string | null
+          screen_height?: number | null
+          screen_width?: number | null
+          session_id?: string | null
+          site_id?: string
+          status?: string | null
+          timestamp?: string
+          transaction_id?: string | null
+          ttclid?: string | null
+          url_full?: string | null
+          url_path?: string | null
+          user_agent?: string | null
+          user_id?: string
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_id?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+          viewport_height?: number | null
+          viewport_width?: number | null
+          visitor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchases_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rate_limit_tracker: {
+        Row: {
+          id: string
+          identifier: string
+          timestamp: string
+        }
+        Insert: {
+          id?: string
+          identifier: string
+          timestamp?: string
+        }
+        Update: {
+          id?: string
+          identifier?: string
+          timestamp?: string
+        }
+        Relationships: []
+      }
+      sites: {
+        Row: {
+          associated_domains: string[] | null
+          created_at: string
+          external_webhook_api_key: string | null
+          external_webhook_url: string | null
+          ga4_api_key: string | null
+          ga4_measurement_id: string | null
+          hotmart_hottok: string | null
+          id: string
+          meta_api_key: string | null
+          meta_pixel_id: string | null
+          name: string
+          slug: string | null
+          tracking_domain: string | null
+          url: string
+          user_id: string
+        }
+        Insert: {
+          associated_domains?: string[] | null
+          created_at?: string
+          external_webhook_api_key?: string | null
+          external_webhook_url?: string | null
+          ga4_api_key?: string | null
+          ga4_measurement_id?: string | null
+          hotmart_hottok?: string | null
+          id?: string
+          meta_api_key?: string | null
+          meta_pixel_id?: string | null
+          name: string
+          slug?: string | null
+          tracking_domain?: string | null
+          url: string
+          user_id: string
+        }
+        Update: {
+          associated_domains?: string[] | null
+          created_at?: string
+          external_webhook_api_key?: string | null
+          external_webhook_url?: string | null
+          ga4_api_key?: string | null
+          ga4_measurement_id?: string | null
+          hotmart_hottok?: string | null
+          id?: string
+          meta_api_key?: string | null
+          meta_pixel_id?: string | null
+          name?: string
+          slug?: string | null
+          tracking_domain?: string | null
+          url?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+    }
+    
