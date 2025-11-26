@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
 
         const siteMap = new Map<string, string>() // normalizedUrl -> siteId
         if (existingSites) {
-            existingSites.forEach(site => {
+            existingSites.forEach((site: any) => {
                 if (site.url) {
                     siteMap.set(normalizeUrl(site.url), site.id)
                 }
