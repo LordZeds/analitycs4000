@@ -173,11 +173,11 @@ export async function POST(req: NextRequest) {
                 console.error('RPC Error:', error)
                 results.push({ error: error.message, code: error.code, details: error.details })
                 debugLog.push({ step: 'rpc_transport_error', error })
-            } else if (data && data.error) {
+            } else if (data && (data as any).error) {
                 // ERRO LÓGICO DO SQL
-                console.error('RPC Logic Error:', data.error)
-                results.push({ error: data.error })
-                debugLog.push({ step: 'rpc_logic_error', error: data.error })
+                console.error('RPC Logic Error:', (data as any).error)
+                results.push({ error: (data as any).error })
+                debugLog.push({ step: 'rpc_logic_error', error: (data as any).error })
             } else {
                 results.push(data)
                 debugLog.push({ step: 'rpc_success', data })
