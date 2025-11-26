@@ -73,8 +73,8 @@ export function PageRulesManager({ siteId }: { siteId: string }) {
             .single()
 
         if (error) {
-            console.error('Error adding rule:', error)
-            alert('Erro ao adicionar regra. Verifique se o caminho já existe.')
+            console.error('Error adding rule:', JSON.stringify(error, null, 2))
+            alert(`Erro ao adicionar regra: ${error.message || 'Erro desconhecido'}`)
         } else if (data) {
             setRules([data, ...rules])
             setNewType('normal_page')

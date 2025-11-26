@@ -6,14 +6,21 @@ const ALLOWED_TABLES = ['pageviews', 'initiate_checkouts', 'purchases']
 
 export async function POST(req: NextRequest) {
     try {
-        // 1. Autenticação
+        // 1. Autenticação e Configuração
         const secretKey = process.env.INGEST_SECRET_KEY
+        const ownerId = process.env.OWNER_USER_ID // <--- OBRIGATÓRIO: Seu ID novo
 
         if (!secretKey) {
-            console.error('INGEST_SECRET_KEY is not defined')
-            return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
+            return NextResponse.json({ error: 'Config error: INGEST_SECRET_KEY missing' }, { status: 500 })
         }
 
+        // Segurança: Se não tiver um "Dono" configurado, rejeita para não criar dados órfãos
+        if (!ownerId) {
+            console.error('OWNER_USER_ID is not defined in Vercel')
+            return NextResponse.json({ error: 'Config error: OWNER_USER_ID missing' }, { status: 500 })
+        }
+
+        // Verifica tanto Bearer (Padrão) quanto apikey (Tracker)
         const authHeader = req.headers.get('Authorization')
         const apiKeyHeader = req.headers.get('apikey')
 
@@ -24,12 +31,13 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        // 2. Processa o Corpo
+        // 2. Processamento do Payload
         const body = await req.json()
 
         let targetTable = ''
         let eventsToInsert: any[] = []
 
+        // Aceita tanto Lote (Array) quanto Evento Único (Objeto)
         if (body.table && Array.isArray(body.events)) {
             targetTable = body.table
             eventsToInsert = body.events
@@ -37,10 +45,9 @@ export async function POST(req: NextRequest) {
             targetTable = body.table
             eventsToInsert = [body]
         } else {
-            return NextResponse.json({ error: 'Invalid payload format' }, { status: 400 })
+            return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
         }
 
-        // 3. Valida Tabela
         targetTable = targetTable.replace('public.', '')
         if (!ALLOWED_TABLES.includes(targetTable)) {
             return NextResponse.json({ error: `Invalid table: ${targetTable}` }, { status: 400 })
@@ -48,8 +55,7 @@ export async function POST(req: NextRequest) {
 
         const supabaseAdmin = getSupabaseAdmin()
 
-        // 4. PREPARAÇÃO & CLASSIFICAÇÃO
-        // Coleta IDs de site para buscar regras de página
+        // 3. PREPARAÇÃO: Coleta IDs para classificar páginas
         const siteIds = new Set<string>()
         eventsToInsert.forEach(evt => { if (evt.site_id) siteIds.add(evt.site_id) })
 
@@ -62,7 +68,7 @@ export async function POST(req: NextRequest) {
             if (rules) pageRules = rules
         }
 
-        // 5. AUTO-CADASTRO DE SITES (Correção do Erro 23503)
+        // 4. AUTO-CADASTRO DE SITES (Com Segurança de Propriedade)
         const sitesToUpsert = new Map()
 
         eventsToInsert.forEach(evt => {
@@ -70,43 +76,31 @@ export async function POST(req: NextRequest) {
                 const siteName = evt.sites?.name || 'Novo Site (Auto)'
                 let siteUrl = `https://auto-${evt.site_id}.com`
 
+                // Tenta extrair a URL real
                 if (evt.url_full) { try { siteUrl = new URL(evt.url_full).origin } catch { } }
                 else if (evt.url) { try { siteUrl = new URL(evt.url).origin } catch { } }
 
-                // Tenta usar o user_id que veio (do Tracker), mas se falhar, a API cuidará
                 sitesToUpsert.set(evt.site_id, {
                     id: evt.site_id,
                     name: siteName,
                     url: siteUrl,
-                    user_id: evt.user_id
+                    user_id: ownerId // <--- FORÇA O SITE A SER SEU (Segurança)
                 })
             }
         })
 
         if (sitesToUpsert.size > 0) {
             const sitesArray = Array.from(sitesToUpsert.values())
-
-            // Loop um por um para garantir que sites novos não travem o lote
-            for (const site of sitesArray) {
-                // Tenta criar normal
-                const { error: siteError } = await supabaseAdmin
-                    .from('sites')
-                    .upsert(site, { onConflict: 'id' })
-
-                if (siteError) {
-                    console.warn(`Site ${site.id} falhou com user_id. Tentando modo órfão...`)
-                    // Se falhar (ex: user_id não existe no banco novo), cria sem dono
-                    const { user_id, ...siteOrphan } = site
-                    await supabaseAdmin.from('sites').upsert(siteOrphan, { onConflict: 'id' })
-                }
-            }
+            // Cria os sites garantindo que o dono é você
+            await supabaseAdmin.from('sites').upsert(sitesArray, { onConflict: 'id' })
         }
 
-        // 6. LIMPEZA E INSERÇÃO
+        // 5. HIGIENIZAÇÃO E ATRIBUIÇÃO DE PROPRIEDADE
         const cleanEvents = eventsToInsert.map(evt => {
+            // Remove lixo (campos que não são colunas)
             const { table, sites, ...rest } = evt
 
-            // Classificação Inteligente
+            // Classificação de Conteúdo (Vendas vs Artigo)
             let contentType = rest.content_type || 'article';
             if (targetTable === 'pageviews' && rest.url_path) {
                 const rule = pageRules.find(r => r.site_id === rest.site_id && r.path === rest.url_path)
@@ -117,10 +111,12 @@ export async function POST(req: NextRequest) {
 
             return {
                 ...rest,
+                user_id: ownerId, // <--- A MÁGICA: Força todos os dados para o seu usuário atual
                 content_type: contentType
             }
         })
 
+        // 6. Inserção Segura
         const { error } = await (supabaseAdmin
             .from(targetTable as any) as any)
             .upsert(cleanEvents, { onConflict: 'id' })
@@ -130,10 +126,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: error.message }, { status: 500 })
         }
 
-        return NextResponse.json({
-            message: 'Events processed successfully',
-            count: cleanEvents.length
-        }, { status: 200 })
+        return NextResponse.json({ success: true, count: cleanEvents.length }, { status: 200 })
 
     } catch (err: any) {
         console.error('API error:', err)
