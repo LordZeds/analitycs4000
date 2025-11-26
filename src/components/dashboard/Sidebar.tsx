@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { LayoutDashboard, Wrench, Menu } from 'lucide-react'
+import { LayoutDashboard, Wrench, Menu, Settings } from 'lucide-react'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { useState } from 'react'
 
@@ -20,6 +20,12 @@ const routes = [
         icon: Wrench,
         href: '/dashboard/developer',
         color: 'text-violet-500',
+    },
+    {
+        label: 'Configuração',
+        icon: Settings,
+        href: '/dashboard/settings/pages',
+        color: 'text-pink-700',
     },
 ]
 
