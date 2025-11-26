@@ -8,19 +8,17 @@ export async function POST(req: NextRequest) {
     try {
         // 1. Autenticação e Configuração
         const secretKey = process.env.INGEST_SECRET_KEY
-        const ownerId = process.env.OWNER_USER_ID // <--- OBRIGATÓRIO: Seu ID novo
+        const ownerId = process.env.OWNER_USER_ID
 
         if (!secretKey) {
             return NextResponse.json({ error: 'Config error: INGEST_SECRET_KEY missing' }, { status: 500 })
         }
 
-        // Segurança: Se não tiver um "Dono" configurado, rejeita para não criar dados órfãos
         if (!ownerId) {
             console.error('OWNER_USER_ID is not defined in Vercel')
             return NextResponse.json({ error: 'Config error: OWNER_USER_ID missing' }, { status: 500 })
         }
 
-        // Verifica tanto Bearer (Padrão) quanto apikey (Tracker)
         const authHeader = req.headers.get('Authorization')
         const apiKeyHeader = req.headers.get('apikey')
 
@@ -37,7 +35,6 @@ export async function POST(req: NextRequest) {
         let targetTable = ''
         let eventsToInsert: any[] = []
 
-        // Aceita tanto Lote (Array) quanto Evento Único (Objeto)
         if (body.table && Array.isArray(body.events)) {
             targetTable = body.table
             eventsToInsert = body.events
@@ -68,7 +65,7 @@ export async function POST(req: NextRequest) {
             if (rules) pageRules = rules
         }
 
-        // 4. AUTO-CADASTRO DE SITES (Com Segurança de Propriedade)
+        // 4. AUTO-CADASTRO DE SITES
         const sitesToUpsert = new Map()
 
         eventsToInsert.forEach(evt => {
@@ -76,7 +73,6 @@ export async function POST(req: NextRequest) {
                 const siteName = evt.sites?.name || 'Novo Site (Auto)'
                 let siteUrl = `https://auto-${evt.site_id}.com`
 
-                // Tenta extrair a URL real
                 if (evt.url_full) { try { siteUrl = new URL(evt.url_full).origin } catch { } }
                 else if (evt.url) { try { siteUrl = new URL(evt.url).origin } catch { } }
 
@@ -84,23 +80,21 @@ export async function POST(req: NextRequest) {
                     id: evt.site_id,
                     name: siteName,
                     url: siteUrl,
-                    user_id: ownerId // <--- FORÇA O SITE A SER SEU (Segurança)
+                    user_id: ownerId
                 })
             }
         })
 
         if (sitesToUpsert.size > 0) {
             const sitesArray = Array.from(sitesToUpsert.values())
-            // Cria os sites garantindo que o dono é você
-            await supabaseAdmin.from('sites').upsert(sitesArray, { onConflict: 'id' })
+            // ✅ CORREÇÃO: Adicionado 'as any' para passar no build do TypeScript
+            await supabaseAdmin.from('sites').upsert(sitesArray as any, { onConflict: 'id' })
         }
 
         // 5. HIGIENIZAÇÃO E ATRIBUIÇÃO DE PROPRIEDADE
         const cleanEvents = eventsToInsert.map(evt => {
-            // Remove lixo (campos que não são colunas)
             const { table, sites, ...rest } = evt
 
-            // Classificação de Conteúdo (Vendas vs Artigo)
             let contentType = rest.content_type || 'article';
             if (targetTable === 'pageviews' && rest.url_path) {
                 const rule = pageRules.find(r => r.site_id === rest.site_id && r.path === rest.url_path)
@@ -111,15 +105,16 @@ export async function POST(req: NextRequest) {
 
             return {
                 ...rest,
-                user_id: ownerId, // <--- A MÁGICA: Força todos os dados para o seu usuário atual
+                user_id: ownerId,
                 content_type: contentType
             }
         })
 
         // 6. Inserção Segura
+        // ✅ CORREÇÃO: Adicionado 'as any' para passar no build do TypeScript
         const { error } = await (supabaseAdmin
             .from(targetTable as any) as any)
-            .upsert(cleanEvents, { onConflict: 'id' })
+            .upsert(cleanEvents as any, { onConflict: 'id' })
 
         if (error) {
             console.error('Supabase insert error:', error)
