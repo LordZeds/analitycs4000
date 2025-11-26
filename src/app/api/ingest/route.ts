@@ -27,28 +27,33 @@ export async function OPTIONS(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+    const debugLog: any[] = []
     try {
         // 1. Autenticação e Configuração
         const secretKey = process.env.INGEST_SECRET_KEY
         const ownerId = process.env.OWNER_USER_ID
+        const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+        debugLog.push({ step: 'config', hasSecret: !!secretKey, hasOwner: !!ownerId, hasServiceKey: !!serviceKey })
 
         if (!secretKey || !ownerId) {
-            return NextResponse.json({ error: 'Config Error: Missing Secret or Owner ID' }, { status: 500, headers: corsHeaders })
+            return NextResponse.json({ error: 'Config Error', debug: debugLog }, { status: 500, headers: corsHeaders })
         }
 
         const authHeader = req.headers.get('Authorization')
         const apiKeyHeader = req.headers.get('apikey')
 
         if ((authHeader !== `Bearer ${secretKey}`) && (apiKeyHeader !== secretKey)) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders })
+            return NextResponse.json({ error: 'Unauthorized', debug: debugLog }, { status: 401, headers: corsHeaders })
         }
 
         // 2. Processamento do Payload
         let body
         try {
             body = await req.json()
+            debugLog.push({ step: 'payload_parsed', bodyKeys: Object.keys(body) })
         } catch {
-            return NextResponse.json({ error: 'Invalid JSON' }, { status: 400, headers: corsHeaders })
+            return NextResponse.json({ error: 'Invalid JSON', debug: debugLog }, { status: 400, headers: corsHeaders })
         }
 
         // Normaliza para Array de Eventos
@@ -58,23 +63,30 @@ export async function POST(req: NextRequest) {
         if (body.events) {
             eventsToProcess = Array.isArray(body.events) ? body.events : [body.events]
         } else if (body.table) {
-            // Formato legado onde o body é o evento
             eventsToProcess = [body]
         } else {
-            return NextResponse.json({ error: 'Invalid payload format' }, { status: 400, headers: corsHeaders })
+            return NextResponse.json({ error: 'Invalid payload format', debug: debugLog }, { status: 400, headers: corsHeaders })
         }
 
         targetTable = targetTable.replace('public.', '')
         if (!ALLOWED_TABLES.includes(targetTable)) {
-            return NextResponse.json({ error: 'Invalid table' }, { status: 400, headers: corsHeaders })
+            return NextResponse.json({ error: 'Invalid table', debug: debugLog }, { status: 400, headers: corsHeaders })
         }
 
-        const supabaseAdmin = getSupabaseAdmin()
+        debugLog.push({ step: 'processing', table: targetTable, eventCount: eventsToProcess.length })
+
+        let supabaseAdmin
+        try {
+            supabaseAdmin = getSupabaseAdmin()
+        } catch (e: any) {
+            debugLog.push({ step: 'supabase_client_error', error: e.message })
+            return NextResponse.json({ error: 'Supabase Config Error', details: e.message, debug: debugLog }, { status: 500, headers: corsHeaders })
+        }
+
         const results = []
 
         // 3. Ingestão via RPC (Lógica no Banco)
         for (const evt of eventsToProcess) {
-            // Prepara o objeto do evento com a tabela correta
             const eventData = {
                 ...evt,
                 table: targetTable
@@ -87,16 +99,36 @@ export async function POST(req: NextRequest) {
 
             if (error) {
                 console.error('RPC Error:', error)
-                results.push({ error: error.message })
+                results.push({ error: error.message, code: error.code, details: error.details })
+                debugLog.push({ step: 'rpc_error', error })
             } else {
                 results.push(data)
+                debugLog.push({ step: 'rpc_success', data })
             }
         }
 
-        return NextResponse.json({ success: true, count: results.length, results }, { status: 200, headers: corsHeaders })
+        return NextResponse.json({ success: true, count: results.length, results, debug: debugLog }, { status: 200, headers: corsHeaders })
 
     } catch (err: any) {
         console.error('API error:', err)
-        return NextResponse.json({ error: 'Internal Error' }, { status: 500, headers: corsHeaders })
+        return NextResponse.json({ error: 'Internal Error', message: err.message, debug: debugLog }, { status: 500, headers: corsHeaders })
     }
+}
+
+export async function GET(req: NextRequest) {
+    const secretKey = process.env.INGEST_SECRET_KEY
+    const ownerId = process.env.OWNER_USER_ID
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+
+    return NextResponse.json({
+        status: 'diagnostic',
+        env: {
+            NEXT_PUBLIC_SUPABASE_URL: supabaseUrl ? 'OK' : 'MISSING',
+            INGEST_SECRET_KEY: secretKey ? 'OK' : 'MISSING',
+            OWNER_USER_ID: ownerId ? 'OK' : 'MISSING',
+            SUPABASE_SERVICE_ROLE_KEY: serviceKey ? 'OK' : 'MISSING' // <--- O problema costuma estar aqui
+        },
+        timestamp: new Date().toISOString()
+    }, { headers: corsHeaders })
 }
